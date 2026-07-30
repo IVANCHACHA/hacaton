@@ -1,0 +1,124 @@
+{
+  "accumulator_capacity": 15,
+  "overflow_rate_limit": 0.001,
+  "breaking_rate_items_per_hour": 4500,
+  "sweep": [
+    {
+      "rate": 2000,
+      "generated": 341,
+      "processed": 339,
+      "overflow_events": 0,
+      "overflow_rate": 0.0,
+      "cycle_p50_s": 5.132709061472667,
+      "cycle_p99_s": 7.0797250885826175,
+      "gate_utilization": {
+        "C": 0.1875641025641028,
+        "D": 0.2533333333333334
+      }
+    },
+    {
+      "rate": 3000,
+      "generated": 478,
+      "processed": 477,
+      "overflow_events": 0,
+      "overflow_rate": 0.0,
+      "cycle_p50_s": 5.408788198973866,
+      "cycle_p99_s": 7.084993366879878,
+      "gate_utilization": {
+        "C": 0.2484615384615386,
+        "D": 0.37025641025640965
+      }
+    },
+    {
+      "rate": 3600,
+      "generated": 588,
+      "processed": 583,
+      "overflow_events": 0,
+      "overflow_rate": 0.0,
+      "cycle_p50_s": 6.255359048536256,
+      "cycle_p99_s": 7.103603880869695,
+      "gate_utilization": {
+        "C": 0.28256410256410247,
+        "D": 0.4676923076923065
+      }
+    },
+    {
+      "rate": 4500,
+      "generated": 726,
+      "processed": 718,
+      "overflow_events": 11,
+      "overflow_rate": 0.015151515151515152,
+      "cycle_p50_s": 7.013301307577521,
+      "cycle_p99_s": 8.22540800797845,
+      "gate_utilization": {
+        "C": 0.33615384615384575,
+        "D": 0.5894871794871775
+      }
+    },
+    {
+      "rate": 6000,
+      "generated": 981,
+      "processed": 971,
+      "overflow_events": 177,
+      "overflow_rate": 0.18042813455657492,
+      "cycle_p50_s": 7.0534060776626575,
+      "cycle_p99_s": 15.84461626381232,
+      "gate_utilization": {
+        "C": 0.44089743589743485,
+        "D": 0.8525641025640991
+      }
+    },
+    {
+      "rate": 7000,
+      "generated": 1144,
+      "processed": 1125,
+      "overflow_events": 416,
+      "overflow_rate": 0.36363636363636365,
+      "cycle_p50_s": 7.063355108918788,
+      "cycle_p99_s": 18.73943985685202,
+      "gate_utilization": {
+        "C": 0.5310256410256394,
+        "D": 0.9085897435897399
+      }
+    },
+    {
+      "rate": 8000,
+      "generated": 1249,
+      "processed": 1225,
+      "overflow_events": 1195,
+      "overflow_rate": 0.9567654123298639,
+      "cycle_p50_s": 15.951525043453756,
+      "cycle_p99_s": 26.366032986447113,
+      "gate_utilization": {
+        "C": 0.6016666666666647,
+        "D": 0.967051282051278
+      }
+    },
+    {
+      "rate": 9000,
+      "generated": 1497,
+      "processed": 1275,
+      "overflow_events": 1475,
+      "overflow_rate": 0.9853039412157648,
+      "cycle_p50_s": 55.27873367697504,
+      "cycle_p99_s": 96.36352004075141,
+      "gate_utilization": {
+        "C": 0.6041025641025621,
+        "D": 0.967051282051278
+      }
+    },
+    {
+      "rate": 10000,
+      "generated": 1600,
+      "processed": 1315,
+      "overflow_events": 1580,
+      "overflow_rate": 0.9875,
+      "cycle_p50_s": 37.089506513293315,
+      "cycle_p99_s": 107.00729377340319,
+      "gate_utilization": {
+        "C": 0.6211538461538441,
+        "D": 0.9475641025640986
+      }
+    }
+  ]
+}

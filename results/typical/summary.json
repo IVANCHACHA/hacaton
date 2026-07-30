@@ -1,0 +1,43 @@
+{
+  "n_items": 30,
+  "confusion_matrix": {
+    "B": {
+      "B": 12,
+      "C": 0,
+      "D": 0,
+      "NONE": 0
+    },
+    "C": {
+      "B": 0,
+      "C": 6,
+      "D": 0,
+      "NONE": 0
+    },
+    "D": {
+      "B": 0,
+      "C": 0,
+      "D": 12,
+      "NONE": 0
+    },
+    "NONE": {
+      "B": 0,
+      "C": 0,
+      "D": 0,
+      "NONE": 0
+    }
+  },
+  "accuracy_per_category": {
+    "B": 1.0,
+    "C": 1.0,
+    "D": 1.0
+  },
+  "accuracy_overall": 1.0,
+  "cycle_time_s": {
+    "mean": 1.5690277777777886,
+    "median": 1.6166666666666623,
+    "p95": 2.7833333333333665
+  },
+  "throughput_items_per_hour": 600.0,
+  "success_rate": 1.0,
+  "fault_events": 6
+}

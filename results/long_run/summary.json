@@ -1,0 +1,20 @@
+{
+  "accumulator_capacity": 15,
+  "overflow_rate_limit": 0.001,
+  "breaking_rate_items_per_hour": null,
+  "sweep": [
+    {
+      "rate": 3600,
+      "generated": 28704,
+      "processed": 28702,
+      "overflow_events": 17,
+      "overflow_rate": 0.0005922519509476031,
+      "cycle_p50_s": 7.039435989180674,
+      "cycle_p99_s": 7.085661247410444,
+      "gate_utilization": {
+        "C": 0.29174946581194205,
+        "D": 0.4316105769231067
+      }
+    }
+  ]
+}

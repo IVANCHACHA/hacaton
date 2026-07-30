@@ -1,0 +1,16 @@
+# 8 часов модельного времени в ускоренном режиме (SimPy, не полная физика — 8ч
+# в PyBullet реального шага физики заняли бы часы расчёта, см. throughput/simpy_model.py).
+# Статистика по пропускной способности на целевой верхней границе нагрузки из ТЗ (3600 шт/ч).
+scenario_name: long_run
+mode: throughput
+seed: 99
+duration_s: 28800   # 8 часов
+belt_speed_mps: 1.0
+accumulator_capacity: 15   # то же значение, что дало запас на throughput-развёртке
+overflow_rate_limit: 0.001
+category_mix:
+  B: 0.5
+  C: 0.2
+  D: 0.3
+throughput_rates_per_hour:
+  - 3600

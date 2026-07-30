@@ -1,0 +1,33 @@
+# Пограничные случаи. k_threshold сознательно оставлен на 0.7 (значение из текста ТЗ) —
+# запустите тот же сценарий с `--k-threshold 0.8`, чтобы увидеть иллюстрацию ТЗ:
+# box_449 и roundedsquare_k079 меняют категорию (B <-> D) в зависимости от того, какое
+# из двух противоречащих друг другу значений порога взять. Это и есть цель сценария —
+# показать, что порог обязан быть параметром, а не хардкодом внутри классификатора.
+scenario_name: borderline
+seed: 7
+duration_s: 90
+spawn_interval_s: 4.0
+belt_speed_mps: 1.0
+k_threshold: 0.7
+camera_noise: false
+
+items:
+  - mesh: borderline/box_449.stl       # 449мм < 450 — габариты B; K=0.707 — порог решает B/D
+    count: 1
+  - mesh: borderline/box_451.stl       # 451мм > 450 — категория C по габаритам, форма не проверяется
+    count: 1
+    category_true: C
+  - mesh: borderline/roundedsquare_k079.stl   # K=0.791
+    count: 1
+  - mesh: borderline/roundedsquare_k081.stl   # K=0.811 — D при любом из двух порогов ТЗ
+    count: 1
+    category_true: D
+  - mesh: borderline/hexagon_k866.stl  # правильный шестигранник, K=cos(30°)=0.866
+    count: 1
+    category_true: D
+  - mesh: borderline/box_rotated35.stl # короб повёрнут на 35° — проверка, что OBB не путает мировые оси
+    count: 1
+    category_true: B
+  - mesh: borderline/box_on_edge.stl   # узкий короб "на ребре"
+    count: 1
+    category_true: B

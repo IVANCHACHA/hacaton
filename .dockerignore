@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+results/
+assets/meshes/vhacd_cache/*.obj
+assets/meshes/vhacd_cache/*.log
+.git/
+тз/Step/
+.claude/

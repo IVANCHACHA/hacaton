@@ -1,0 +1,12 @@
+pybullet==3.2.6
+trimesh==4.4.9
+shapely==2.0.6
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+scipy==1.13.1
+pyyaml==6.0.2
+simpy==4.1.1
+networkx==3.6.1
+mapbox_earcut==2.0.0
+rtree==1.4.1
+pytest==8.3.3

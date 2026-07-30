@@ -1,0 +1,32 @@
+# Типовой сценарий: несколько товаров каждой категории, полный цикл с возвратом
+# в рабочее состояние. Товары подобраны из числа надёжно проходящих физику по
+# итогам Phase 1-2 (см. README, раздел "Известные ограничения") — редкие/пограничные
+# формы (тонкие/круглые тела, которые катятся) намеренно вынесены в borderline/faults,
+# чтобы typical показывал именно штатную работу, а не скрывал проблемные случаи.
+scenario_name: typical
+seed: 42
+duration_s: 180
+spawn_interval_s: 5.0
+belt_speed_mps: 1.0
+k_threshold: 0.7
+camera_noise: false
+
+items:
+  - mesh: box_300x200x200.stl
+    count: 6
+    category_true: B
+  - mesh: lunchbox.stl
+    count: 6
+    category_true: B
+  - mesh: box_400x400x300.stl
+    count: 6
+    category_true: C
+  - mesh: bottle.stl
+    count: 4
+    category_true: D
+  - mesh: detergent_bottle.stl
+    count: 4
+    category_true: D
+  - mesh: helmet.stl
+    count: 4
+    category_true: D

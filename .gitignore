@@ -1,0 +1,8 @@
+.venv/
+.claude/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+assets/meshes/vhacd_cache/*_src.obj
+*.mp4
