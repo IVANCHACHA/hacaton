@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ПАК Трек 3 — интерактивная симуляция (2 камеры + 2 шибера)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121b2e; --panel2: #17233a; --line: #2a3a58;
+    --text: #e7ecf5; --muted: #93a2c0; --accentB: #2e7d32; --accentC: #e65100;
+    --accentD: #6a1b9a; --accentSensor: #2196f3; --warn: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0 0 4px; font-size: 18px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .layout { display: grid; grid-template-columns: 1fr 340px; gap: 14px; padding: 14px 20px 24px; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .panel + .panel { margin-top: 14px; }
+  canvas { width: 100%; background: #0e1626; border-radius: 8px; display: block; }
+  .controls { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; flex-wrap: wrap; }
+  button, select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: #1e2d4a; }
+  button.primary { background: #1a56db; border-color: #1a56db; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 13px; }
+  .stats .k { color: var(--muted); }
+  .stats .v { font-weight: 600; text-align: right; }
+  .stats .full { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 8px; }
+  .stat-warn { color: var(--warn); }
+  .stat-ok { color: var(--accentB); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  #log { height: 170px; overflow-y: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.5; color: #b7c4de; }
+  #log div.ev-spawn { color: #7fa6ff; }
+  #log div.ev-sensor { color: #58c4ff; }
+  #log div.ev-shiber { color: #ffb454; }
+  #log div.ev-B { color: #7ee08a; }
+  #log div.ev-fail { color: #ff8080; }
+  #reading { font-size: 12.5px; line-height: 1.7; }
+  #reading .name { font-weight: 700; font-size: 14px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .pill-B { background: rgba(46,125,50,.25); color: #7ee08a; }
+  .pill-C { background: rgba(230,81,0,.25); color: #ffb454; }
+  .pill-D { background: rgba(106,27,154,.25); color: #d29bff; }
+  footer { padding: 10px 20px 20px; color: var(--muted); font-size: 11.5px; }
+  a { color: #7fa6ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Трек 3 — ПАК сортировки: интерактивная симуляция участка (2 камеры + 2 шибера)</h1>
+  <p>
+    Товары приходят по конвейеру A (1 м/с, фиксирован) &rarr; зона сенсоров (камера сверху + лазерный
+    профилометр сбоку) &rarr; шибер 1 отводит негабарит в C &rarr; шибер 2 отводит «круглые» в D &rarr;
+    остальное едет напрямую в инфид основного сортировщика B. Габариты и K = r&#8321;/R&#8322; всех 11 товаров
+    в сцене посчитаны из реальных STL-моделей организаторов (см. <code>tools/classify_stl.py</code>).
+  </p>
+</header>
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <canvas id="stage" width="1100" height="380"></canvas>
+      <div class="controls">
+        <button id="btnPlay" class="primary">Пауза</button>
+        <button id="btnReset">Сброс</button>
+        <label style="font-size:12px;color:var(--muted)">Скорость
+          <select id="speed">
+            <option value="1">1×</option>
+            <option value="2" selected>2×</option>
+            <option value="5">5×</option>
+            <option value="10">10×</option>
+          </select>
+        </label>
+        <span style="font-size:12px;color:var(--muted)">t = <span id="tclock">0.0</span> c (симулируемое время)</span>
+      </div>
+      <div class="legend">
+        <span><span class="sw" style="background:#9e9e9e"></span>не классифицирован</span>
+        <span><span class="sw" style="background:var(--accentB)"></span>B — подходит для сортировки</span>
+        <span><span class="sw" style="background:var(--accentC)"></span>C — не подходит по габаритам</span>
+        <span><span class="sw" style="background:var(--accentD)"></span>D — круглый, нужна доупаковка</span>
+        <span><span class="sw" style="background:var(--accentSensor)"></span>зона сенсоров</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Текущее показание сенсоров</h2>
+      <div id="reading">наведите время — товар ещё не прошёл зону сенсоров</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Метрики (с начала прогона)</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="panel">
+      <h2>Журнал событий</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Автономная HTML/JS-модель, без внешних зависимостей и без сервера — просто открыть файл в браузере.
+  Полная версия симуляции (та же логика, но с честной геометрической 2-сенсорной классификацией на полном
+  наборе точек выпуклой оболочки) — <code>tools/simulate.py</code> и <code>src/sorter_pak</code> (ROS2-узлы).
+</footer>
+
+<script>
+const CATALOG = [{"name": "Бутылка", "dims_mm": [305.0, 91.32, 91.24], "category_true": "D", "k_values": {"XY": 0.9964, "XZ": 0.2939, "YZ": 0.2942}, "weight_kg": 1.271}, {"name": "Короб 300х200х200", "dims_mm": [301.0, 200.5, 200.0], "category_true": "B", "k_values": {"XY": 0.72, "XZ": 0.5683, "YZ": 0.5623}, "weight_kg": 0.724}, {"name": "Короб 400х400х300", "dims_mm": [401.0, 400.0, 300.5], "category_true": "C", "k_values": {}, "weight_kg": 2.892}, {"name": "ЛанчБокс", "dims_mm": [201.0, 152.4, 62.3], "category_true": "B", "k_values": {"XY": 0.4042, "XZ": 0.3098, "YZ": 0.6371}, "weight_kg": 0.286}, {"name": "Мешок", "dims_mm": [201.64, 176.19, 169.62], "category_true": "D", "k_values": {"XY": 0.827, "XZ": 0.8161, "YZ": 0.8263}, "weight_kg": 1.055}, {"name": "Пуфик", "dims_mm": [488.9, 488.9, 264.0], "category_true": "C", "k_values": {}, "weight_kg": 4.733}, {"name": "Ручка", "dims_mm": [148.46, 13.09, 9.0], "category_true": "C", "k_values": {}, "weight_kg": 0.02}, {"name": "Тарелка", "dims_mm": [209.51, 209.44, 26.53], "category_true": "D", "k_values": {"XY": 0.1267, "XZ": 0.1266, "YZ": 0.9986}, "weight_kg": 0.815}, {"name": "Цилиндр", "dims_mm": [435.0, 50.0, 43.0], "category_true": "B", "k_values": {"XY": 0.7493, "XZ": 0.0988, "YZ": 0.1149}, "weight_kg": 1.263}, {"name": "Шлем", "dims_mm": [352.07, 297.64, 281.63], "category_true": "D", "k_values": {"XY": 0.8202, "XZ": 0.7845, "YZ": 0.7496}, "weight_kg": 3.689}, {"name": "Моющее средство", "dims_mm": [279.64, 259.77, 179.18], "category_true": "B", "k_values": {"XY": 0.6563, "XZ": 0.5268, "YZ": 0.7112}, "weight_kg": 6.508}]
+;
+
+const K_THRESHOLD = 0.8;
+const LOW_CONF_BAND = 0.03;
+const GABARIT_MIN = 10, GABARIT_MAX = [450, 320, 320];
+
+const X = { fixedEnd: 2.1, sensor: 2.4, shiber1: 3.4, shiber2: 4.4, end: 5.6 };
+const BELT_SPEED = 1.0;      // m/s, simulated (fixed, per task)
+const PITCH = 0.7;           // m between items
+const SHIBER_TIME = 0.25;    // s
+
+function classifyItem(item) {
+  // gabarit check happens once (deterministic, from real dims)
+  const dims = [...item.dims_mm].sort((a,b)=>b-a);
+  const gmax = [...GABARIT_MAX].sort((a,b)=>b-a);
+  const fits = dims.every(d => d >= GABARIT_MIN) && dims.every((d,i) => d <= gmax[i]);
+  if (!fits) return { category: 'C', fits, circular: false, lowConf: false, kmax: null };
+  const ks = Object.values(item.k_values);
+  const kmax = ks.length ? Math.max(...ks) : 0;
+  const circular = kmax >= K_THRESHOLD;
+  const lowConf = ks.some(k => Math.abs(k - K_THRESHOLD) <= LOW_CONF_BAND);
+  const category = (circular || lowConf) ? 'D' : 'B';
+  return { category, fits, circular, lowConf, kmax };
+}
+
+// pre-resolve ground truth + "measured" (== fail-safe simulated) category per catalog entry
+CATALOG.forEach(it => { it._sim = classifyItem(it); });
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const originX = 40, pxPerM = (W - 220) / X.end, beltY = H/2 - 60, beltH = 46;
+
+function xToPx(m) { return originX + m * pxPerM; }
+
+let items = [];
+let nextId = 0, nextSpawnT = 0, t = 0, playing = true, speed = 2;
+let shiber1 = { state: 'IDLE', until: -1, n: 0, busy: 0 };
+let shiber2 = { state: 'IDLE', until: -1, n: 0, busy: 0 };
+let counts = { B: 0, C: 0, D: 0 };
+let confusion = { correct: 0, total: 0, unsafeToB: 0 };
+let lastReading = null;
+
+function logLine(cls, text) {
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'ev-' + cls;
+  div.textContent = `[${t.toFixed(2)}s] ${text}`;
+  el.appendChild(div);
+  while (el.children.length > 220) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+function spawn() {
+  const type = CATALOG[Math.floor(Math.random() * CATALOG.length)];
+  const item = {
+    id: nextId++, type, x: 0, sensed: false, decisionReadyT: null,
+    measured: null, routed: null,
+  };
+  items.push(item);
+  logLine('spawn', `спавн #${item.id} — ${type.name}`);
+}
+
+function sensorCapture(item) {
+  item.sensed = true;
+  item.measured = item.type._sim.category;
+  const latency = 0.04 + Math.random() * 0.08;
+  item.decisionReadyT = t + latency;
+  lastReading = { item, t };
+  logLine('sensor', `сенсор: #${item.id} ${item.type.name} → ${item.measured}` +
+    (item.type._sim.lowConf ? ' (низкая уверенность K≈0.8 → fail-safe D)' : ''));
+  renderReading();
+}
+
+function tryShiber(item, shiber, target, name) {
+  if (item.decisionReadyT === null || t < item.decisionReadyT) {
+    item.measured = 'D'; // fail-safe
+  }
+  if (item.measured === target) {
+    shiber.state = 'ACTUATING'; shiber.until = t + SHIBER_TIME; shiber.n++; shiber.busy += SHIBER_TIME;
+    item.routed = target;
+    logLine('shiber', `${name} → отвод #${item.id} (${item.type.name}) в ${target}`);
+    return true;
+  }
+  return false;
+}
+
+function finishItem(item, zone) {
+  counts[zone]++;
+  confusion.total++;
+  if (zone === item.type._sim.category) confusion.correct++;
+  if (zone === 'B' && item.type._sim.category !== 'B') confusion.unsafeToB++;
+}
+
+function step(dt) {
+  t += dt;
+  if (t >= nextSpawnT) { spawn(); nextSpawnT += PITCH / BELT_SPEED; }
+
+  const still = [];
+  for (const item of items) {
+    item.x += BELT_SPEED * dt;
+    if (!item.sensed && item.x >= X.sensor) sensorCapture(item);
+
+    let routed = false;
+    if (!routed && item.x >= X.shiber1) routed = tryShiber(item, shiber1, 'C', 'шибер 1');
+    if (!routed && item.x >= X.shiber2) routed = tryShiber(item, shiber2, 'D', 'шибер 2');
+    if (!routed && item.x >= X.end) {
+      item.routed = 'B'; routed = true;
+      logLine('B', `#${item.id} (${item.type.name}) → инфид B`);
+    }
+    if (routed) finishItem(item, item.routed); else still.push(item);
+  }
+  items = still;
+
+  if (shiber1.state === 'ACTUATING' && t >= shiber1.until) shiber1.state = 'IDLE';
+  if (shiber2.state === 'ACTUATING' && t >= shiber2.until) shiber2.state = 'IDLE';
+}
+
+const COLORS = { null: '#9e9e9e', B: '#2e7d32', C: '#e65100', D: '#6a1b9a' };
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // belt
+  ctx.fillStyle = '#1a2740';
+  ctx.fillRect(xToPx(0), beltY, xToPx(X.end) - xToPx(0), beltH);
+  ctx.strokeStyle = '#3a4d73'; ctx.setLineDash([6,4]);
+  ctx.strokeRect(xToPx(0), beltY, xToPx(X.fixedEnd) - xToPx(0), beltH);
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#93a2c0'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('конвейер A (фиксирован)', xToPx(X.fixedEnd/2), beltY - 10);
+
+  // sensor line
+  ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 2; ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(xToPx(X.sensor), beltY - 40); ctx.lineTo(xToPx(X.sensor), beltY + beltH + 40); ctx.stroke();
+  ctx.setLineDash([]); ctx.lineWidth = 1;
+  ctx.fillStyle = '#2196f3'; ctx.fillText('сенсоры', xToPx(X.sensor), beltY - 46);
+  ctx.fillText('(top + профилометр)', xToPx(X.sensor), beltY - 32);
+
+  // shibers
+  drawShiber(X.shiber1, shiber1, '#e65100', 'шибер 1', 'C — негабарит');
+  drawShiber(X.shiber2, shiber2, '#6a1b9a', 'шибер 2', 'D — круглые');
+
+  // B arrow
+  ctx.fillStyle = '#7ee08a'; ctx.textAlign = 'left';
+  ctx.fillText('→ B (осн. сортировщик)', xToPx(X.end) + 10, beltY + beltH/2 + 4);
+
+  // items
+  ctx.textAlign = 'center';
+  for (const item of items) {
+    const px = xToPx(item.x);
+    if (px < xToPx(0) - 20 || px > W) continue;
+    const color = COLORS[item.measured] || COLORS.null;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+    const w = 22, h = 30;
+    ctx.fillRect(px - w/2, beltY + beltH/2 - h/2, w, h);
+    ctx.strokeRect(px - w/2, beltY + beltH/2 - h/2, w, h);
+  }
+}
+
+function drawShiber(xm, shiber, color, label1, label2) {
+  const px = xToPx(xm);
+  const active = shiber.state === 'ACTUATING';
+  ctx.fillStyle = color;
+  ctx.globalAlpha = active ? 0.85 : 0.22;
+  ctx.fillRect(px - 5, beltY - 20, 10, beltH + 40);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(label1, px, beltY + beltH + 42);
+  ctx.fillText(label2, px, beltY + beltH + 56);
+}
+
+function renderReading() {
+  const box = document.getElementById('reading');
+  if (!lastReading) { box.textContent = 'товар ещё не прошёл зону сенсоров'; return; }
+  const it = lastReading.item.type;
+  const sim = it._sim;
+  const ks = Object.entries(it.k_values).map(([p,k]) => `${p}=${k.toFixed(3)}`).join(', ') || '—';
+  box.innerHTML = `
+    <div class="name">${it.name} <span class="pill pill-${sim.category}">${sim.category}</span></div>
+    габариты (по убыванию): ${it.dims_mm.map(d=>d.toFixed(1)).join(' × ')} мм<br>
+    K по проекциям: ${ks}<br>
+    масса (оценка): ${it.weight_kg} кг<br>
+    правило: габарит [10,10,10]…[450,320,320] мм; круглое, если K ≥ ${K_THRESHOLD} хотя бы в одной проекции
+  `;
+}
+
+function renderStats() {
+  const acc = confusion.total ? (100 * confusion.correct / confusion.total).toFixed(1) : '—';
+  const total = counts.B + counts.C + counts.D;
+  const throughput = t > 0 ? (total / t * 3600).toFixed(0) : '0';
+  const el = document.getElementById('stats');
+  el.innerHTML = `
+    <div class="k">Обработано</div><div class="v">${total}</div>
+    <div class="k">B / C / D</div><div class="v">${counts.B} / ${counts.C} / ${counts.D}</div>
+    <div class="k">Пропускная способность</div><div class="v">${throughput} шт/ч</div>
+    <div class="k">Точность маршрутизации</div><div class="v">${acc}%</div>
+    <div class="k">Шибер 1: срабатываний</div><div class="v">${shiber1.n}</div>
+    <div class="k">Шибер 2: срабатываний</div><div class="v">${shiber2.n}</div>
+    <div class="k full ${confusion.unsafeToB ? 'stat-warn' : 'stat-ok'}">Опасных пропусков в B (круг/негабарит)</div>
+    <div class="v full ${confusion.unsafeToB ? 'stat-warn' : 'stat-ok'}">${confusion.unsafeToB}</div>
+  `;
+}
+
+let lastFrameWall = performance.now();
+function loop(nowWall) {
+  const dtWall = Math.min(0.1, (nowWall - lastFrameWall) / 1000);
+  lastFrameWall = nowWall;
+  if (playing) {
+    step(dtWall * speed);
+    document.getElementById('tclock').textContent = t.toFixed(1);
+  }
+  draw();
+  renderStats();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('btnPlay').addEventListener('click', (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? 'Пауза' : 'Продолжить';
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  items = []; nextId = 0; nextSpawnT = 0; t = 0;
+  shiber1 = { state:'IDLE', until:-1, n:0, busy:0 };
+  shiber2 = { state:'IDLE', until:-1, n:0, busy:0 };
+  counts = { B:0, C:0, D:0 };
+  confusion = { correct:0, total:0, unsafeToB:0 };
+  lastReading = null;
+  document.getElementById('log').innerHTML = '';
+  renderReading();
+});
+document.getElementById('speed').addEventListener('change', (e) => { speed = parseFloat(e.target.value); });
+
+renderReading();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

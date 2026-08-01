@@ -1,0 +1,324 @@
+<?xml version="1.0" ?>
+<!--
+  Gazebo (gz-sim / Harmonic) world for the Track 3 PAK line.
+
+  Coordinate convention matches sorter_pak/core/conveyor_sim.py exactly
+  (X_SENSOR/X_SHIBER1/X_SHIBER2/X_END) so gz_bridge_node.py can reuse those
+  constants unmodified - X=0 is the start of the fixed conveyor A.
+
+  Belt top surface is at Z = BELT_TOP_Z (0.5 m); items are spawned resting
+  on it (see gz_bridge_node.py) and ride it at a constant 1 m/s via the
+  per-model VelocityControl plugin baked into each models/<slug>/model.sdf
+  (tools/export_gz_models.py). Diversion into roll cages C/D is a lateral
+  velocity command on /model/<name>/cmd_vel, not a moving physical gate -
+  the "шибер" markers below are visual-only position references.
+-->
+<sdf version="1.9">
+  <world name="pak_line">
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+    <!-- required for the 2 real depth-camera sensors below (top + side) -
+         see core/vision.py and docs/GAZEBO.md for the CV pipeline that
+         consumes their output. -->
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.4 0.2 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.3 0.3 0.32 1</ambient><diffuse>0.3 0.3 0.32 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============ Belt: конвейер A (0..2.1 m, fixed) + our design zone
+         (2.1..6.0 m) modelled as one continuous surface, per Q&A #57/#103/#116
+         (a single continuous belt with items placed/diverted along it is
+         an explicitly allowed reading of the "секции по 700мм" wording). -->
+    <model name="belt">
+      <static>true</static>
+      <pose>3.0 0 0.475 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>6.0 0.5 0.05</size></box></geometry>
+          <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>6.0 0.5 0.05</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.08 0.08 0.08 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- side rails (Q&A #105/#109/#115 - belt has side rails, height on our discretion) -->
+    <model name="rail_left">
+      <static>true</static>
+      <pose>3.0 0.26 0.52 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.02 0.08</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>6.0 0.02 0.08</size></box></geometry>
+          <material><ambient>0.5 0.5 0.5 1</ambient><diffuse>0.5 0.5 0.5 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="rail_right">
+      <static>true</static>
+      <pose>3.0 -0.26 0.52 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>6.0 0.02 0.08</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>6.0 0.02 0.08</size></box></geometry>
+          <material><ambient>0.5 0.5 0.5 1</ambient><diffuse>0.5 0.5 0.5 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- sensor zone marker (X=2.4m) - camera-over + line-profiler-across, visual only -->
+    <model name="sensor_zone_marker">
+      <static>true</static>
+      <pose>2.4 0 0.55 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.01 0.5 0.15</size></box></geometry>
+          <material><ambient>0.1 0.4 0.9 0.6</ambient><diffuse>0.1 0.4 0.9 0.6</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <!-- Sensor 1 "TOP": overhead RGB camera, straight down (pitch 90deg,
+         local +X forward -> world -Z). Distance to the belt surface at
+         rest is (cam_z - BELT_TOP_Z) = 1.2 - 0.5 = 0.7 m - this fixes the
+         mm-per-pixel scale used in core/vision.py TOP_CAMERA (a real
+         single RGB camera would need an in-frame ruler for this, per
+         https://github.com/irwkc/robozone; a simulated camera at a known,
+         fixed pose doesn't need one) - keep the two in sync if you move
+         this pose. Was a depth_camera before the vision.py rewrite that
+         adopted robozone's appearance/contour-based approach; see
+         docs/GAZEBO.md. -->
+    <model name="sensor_top_camera">
+      <static>true</static>
+      <pose>2.4 0 1.2 0 1.5708 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+          <material><ambient>0.1 0.4 0.9 1</ambient><diffuse>0.1 0.4 0.9 1</diffuse></material>
+        </visual>
+        <sensor name="top_rgb" type="camera">
+          <topic>camera_top/image</topic>
+          <update_rate>10</update_rate>
+          <always_on>true</always_on>
+          <visualize>true</visualize>
+          <camera>
+            <horizontal_fov>1.0</horizontal_fov>
+            <image><width>320</width><height>240</height><format>R8G8B8</format></image>
+            <clip><near>0.05</near><far>5.0</far></clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+
+    <!-- Sensor 2 "SIDE": RGB camera mounted beside the belt at roughly
+         item mid-height, looking across it (yaw -90deg, local +X forward
+         -> world -Y). Its job is to supply height_mm (silhouette bounding
+         box, since a single top-down RGB view can't measure height at
+         all - see core/vision.py measure_side) and a second, independent
+         cross-section (K_side) for the "circle in any of 3 orthogonal
+         projections" rule - see docs/REPORT.md 3.3. Distance to the far
+         rail is y=0.6-(-0.26)=0.86m, fixing SIDE_CAMERA's mm-per-pixel
+         scale in core/vision.py - keep in sync if you move this pose. -->
+    <model name="sensor_side_camera">
+      <static>true</static>
+      <pose>2.4 0.6 0.65 0 0 -1.5708</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+          <material><ambient>0.1 0.4 0.9 1</ambient><diffuse>0.1 0.4 0.9 1</diffuse></material>
+        </visual>
+        <sensor name="side_rgb" type="camera">
+          <topic>camera_side/image</topic>
+          <update_rate>10</update_rate>
+          <always_on>true</always_on>
+          <visualize>true</visualize>
+          <camera>
+            <horizontal_fov>1.0</horizontal_fov>
+            <image><width>320</width><height>240</height><format>R8G8B8</format></image>
+            <clip><near>0.05</near><far>5.0</far></clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+
+    <!-- shiber 1 (X=3.4m, gabarit -> C) and shiber 2 (X=4.4m, круг -> D):
+         the ACTUAL diversion is still a velocity push on the item itself
+         (gz_bridge_node.py, documented simplification, see docs/GAZEBO.md
+         - no physics risk from an untested PID here). These paddles are
+         a purely VISUAL, kinematic indicator swung by gz_bridge_node in
+         lockstep with that push, so a live viewer can actually see a
+         shiber "fire" - they have no <collision> and cannot affect any
+         item's trajectory themselves. Revolute axis is vertical (Z), so
+         gravity exerts no torque about it (r x F_gravity has no
+         z-component for a purely-Z force) - the paddle holds position
+         without fighting gravity, low gains are enough. -->
+    <model name="shiber1_paddle">
+      <pose>3.4 0.26 0.55 0 0 0</pose>
+      <link name="base">
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+      </link>
+      <joint name="anchor" type="fixed">
+        <parent>world</parent>
+        <child>base</child>
+      </joint>
+      <link name="paddle">
+        <pose relative_to="base">0.15 0 0 0 0 0</pose>
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry><box><size>0.3 0.02 0.2</size></box></geometry>
+          <material><ambient>0.95 0.45 0.05 1</ambient><diffuse>0.95 0.45 0.05 1</diffuse>
+                     <emissive>0.2 0.08 0 1</emissive></material>
+        </visual>
+      </link>
+      <joint name="swing" type="revolute">
+        <parent>base</parent>
+        <child>paddle</child>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-0.1</lower><upper>1.3</upper></limit>
+        </axis>
+      </joint>
+      <!-- command: gz topic -t /shiber1/paddle_cmd -m gz.msgs.Double -p 'data: 1.1'  (open)
+                    gz topic -t /shiber1/paddle_cmd -m gz.msgs.Double -p 'data: 0'    (closed) -->
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>swing</joint_name>
+        <topic>/shiber1/paddle_cmd</topic>
+        <p_gain>8</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0.4</d_gain>
+        <cmd_max>10</cmd_max>
+        <cmd_min>-10</cmd_min>
+      </plugin>
+    </model>
+
+    <model name="shiber2_paddle">
+      <pose>4.4 -0.26 0.55 0 0 0</pose>
+      <link name="base">
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+      </link>
+      <joint name="anchor" type="fixed">
+        <parent>world</parent>
+        <child>base</child>
+      </joint>
+      <link name="paddle">
+        <pose relative_to="base">0.15 0 0 0 0 0</pose>
+        <inertial><mass>0.05</mass>
+          <inertia><ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+                   <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry><box><size>0.3 0.02 0.2</size></box></geometry>
+          <material><ambient>0.55 0.15 0.75 1</ambient><diffuse>0.55 0.15 0.75 1</diffuse>
+                     <emissive>0.12 0.03 0.16 1</emissive></material>
+        </visual>
+      </link>
+      <joint name="swing" type="revolute">
+        <parent>base</parent>
+        <child>paddle</child>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-1.3</lower><upper>0.1</upper></limit>
+        </axis>
+      </joint>
+      <!-- gz topic -t /shiber2/paddle_cmd -m gz.msgs.Double -p 'data: -1.1'  (open) / 'data: 0' (closed) -->
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>swing</joint_name>
+        <topic>/shiber2/paddle_cmd</topic>
+        <p_gain>8</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0.4</d_gain>
+        <cmd_max>10</cmd_max>
+        <cmd_min>-10</cmd_min>
+      </plugin>
+    </model>
+
+    <!-- roll cages: open-top boxes (walls only) beside each shiber.
+         Shiber1 pushes items to +Y (roll cage C), shiber2 pushes to -Y
+         (roll cage D) - see gz_bridge_node.py SHIBER_PUSH_DIR. -->
+    <model name="roll_cage_C">
+      <static>true</static>
+      <pose>3.4 1.0 0.4 0 0 0</pose>
+      <link name="link">
+        <collision name="floor"><geometry><box><size>0.6 0.6 0.05</size></box></geometry></collision>
+        <visual name="floor_v">
+          <geometry><box><size>0.6 0.6 0.05</size></box></geometry>
+          <material><ambient>0.9 0.4 0.0 0.5</ambient><diffuse>0.9 0.4 0.0 0.5</diffuse></material>
+        </visual>
+        <collision name="wall_far"><pose>0 0.29 0.4 0 0 0</pose>
+          <geometry><box><size>0.6 0.02 0.8</size></box></geometry></collision>
+        <visual name="wall_far_v"><pose>0 0.29 0.4 0 0 0</pose>
+          <geometry><box><size>0.6 0.02 0.8</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+        </visual>
+        <collision name="wall_side"><pose>0.29 0 0.4 0 0 0</pose>
+          <geometry><box><size>0.02 0.6 0.8</size></box></geometry></collision>
+        <visual name="wall_side_v"><pose>0.29 0 0.4 0 0 0</pose>
+          <geometry><box><size>0.02 0.6 0.8</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="roll_cage_D">
+      <static>true</static>
+      <pose>4.4 -1.0 0.4 0 0 0</pose>
+      <link name="link">
+        <collision name="floor"><geometry><box><size>0.6 0.6 0.05</size></box></geometry></collision>
+        <visual name="floor_v">
+          <geometry><box><size>0.6 0.6 0.05</size></box></geometry>
+          <material><ambient>0.4 0.1 0.6 0.5</ambient><diffuse>0.4 0.1 0.6 0.5</diffuse></material>
+        </visual>
+        <collision name="wall_far"><pose>0 -0.29 0.4 0 0 0</pose>
+          <geometry><box><size>0.6 0.02 0.8</size></box></geometry></collision>
+        <visual name="wall_far_v"><pose>0 -0.29 0.4 0 0 0</pose>
+          <geometry><box><size>0.6 0.02 0.8</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+        </visual>
+        <collision name="wall_side"><pose>0.29 0 0.4 0 0 0</pose>
+          <geometry><box><size>0.02 0.6 0.8</size></box></geometry></collision>
+        <visual name="wall_side_v"><pose>0.29 0 0.4 0 0 0</pose>
+          <geometry><box><size>0.02 0.6 0.8</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

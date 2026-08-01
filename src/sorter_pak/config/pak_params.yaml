@@ -1,0 +1,22 @@
+# Reference parameter values for the sorter_pak nodes. These mirror the
+# constants in sorter_pak/core/conveyor_sim.py (the single source of
+# truth used by both the ROS2 nodes and the standalone tools/simulate.py)
+# and are documented, not hard requirements - see REPORT.md "Допущения".
+conveyor_sim_node:
+  ros__parameters:
+    catalog_path: ""          # "" -> sim_output/item_catalog.json, built on first run
+    physics_dt: 0.02           # s, belt/position update period
+    pitch_m: 0.7                # m between items, Q&A #58/#63
+    belt_speed_mps: 1.0         # m/s, fixed per task, Q&A #87/#98
+    seed: 7
+
+perception_node:
+  ros__parameters:
+    catalog_path: ""
+    latency_min_s: 0.04         # inference + comms budget, documented assumption
+    latency_max_s: 0.12
+    seed: 11
+
+executive_node:
+  ros__parameters:
+    shiber_time_s: 0.25          # swing-out + sweep + return, << 0.7s item pitch

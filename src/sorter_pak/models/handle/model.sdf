@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="item_template">
+    <pose>0 0 0 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.0200</mass>
+        <inertia>
+          <ixx>0.000010</ixx><iyy>0.000037</iyy><izz>0.000037</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <box><size>0.1485 0.0131 0.0090</size></box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.6</mu><mu2>0.6</mu2></ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh><uri>meshes/visual.stl</uri></mesh>
+        </geometry>
+        <material>
+          <ambient>0.20 0.20 0.20 1</ambient>
+          <diffuse>0.20 0.20 0.20 1</diffuse>
+        </material>
+      </visual>
+    </link>
+    <!-- items ride the belt at a constant 1 m/s (Q&A #87/#98 - belt speed
+         is fixed and cannot be slowed/stopped). Velocity is NOT set here:
+         gz_bridge_node.py publishes it on /model/<name>/cmd_vel right
+         after spawn (and again, sideways, for the shiber push) - keeping
+         a single code path for "what makes this thing move" instead of
+         splitting it between this file and the bridge node. -->
+    <plugin filename="gz-sim-velocity-control-system" name="gz::sim::systems::VelocityControl"/>
+  </model>
+</sdf>
