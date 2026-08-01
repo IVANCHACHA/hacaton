@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CV</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="bar">
+      <span id="fps">— fps</span>
+      <div class="views" role="group" aria-label="Вид камеры">
+        <button type="button" class="view-btn" data-view="top" aria-pressed="true">сверху</button>
+        <button type="button" class="view-btn" data-view="side" aria-pressed="false">сбоку</button>
+      </div>
+      <span id="live" data-state="off">off</span>
+    </header>
+
+    <main class="layout">
+      <section class="stage" id="stage-frame">
+        <img id="stream" src="/video" alt="" />
+        <svg id="roi-svg" class="roi-svg" viewBox="0 0 100 100">
+          <polygon id="roi-poly" points=""></polygon>
+          <circle class="roi-handle" data-i="0" cx="20" cy="20" r="8"></circle>
+          <circle class="roi-handle" data-i="1" cx="80" cy="20" r="8"></circle>
+          <circle class="roi-handle" data-i="2" cx="80" cy="80" r="8"></circle>
+          <circle class="roi-handle" data-i="3" cx="20" cy="80" r="8"></circle>
+        </svg>
+      </section>
+
+      <aside class="hud">
+        <div class="zone" id="zone">—</div>
+        <div class="cat" id="cat">—</div>
+        <div class="detail" id="detail"></div>
+
+        <section class="torch-box" aria-label="Фонарики">
+          <div class="calib-title">фонарики</div>
+          <div class="side-actions">
+            <button type="button" id="torch-top" class="ghost torch" data-cam="top" data-on="0">
+              сверху
+            </button>
+            <button type="button" id="torch-side" class="ghost torch" data-cam="side" data-on="0">
+              сбоку
+            </button>
+          </div>
+          <div class="calib-status" id="torch-status"></div>
+        </section>
+
+        <section class="side-box" aria-label="Боковая камера">
+          <div class="calib-title">третье измерение</div>
+          <div class="side-state" id="side-state">камера сбоку не подключена</div>
+          <div class="side-live" id="side-live"></div>
+          <label class="calib-row">
+            <span>эталон</span>
+            <input id="side-ref-mm" type="number" min="10" max="500" step="1" value="200" />
+            <span>mm</span>
+          </label>
+          <div class="side-actions">
+            <button type="button" id="side-scale" class="ghost">масштаб по эталону</button>
+            <button type="button" id="side-rot" class="ghost">поворот 0°</button>
+          </div>
+          <div class="calib-status" id="side-status"></div>
+        </section>
+
+        <section class="calib" aria-label="Калибровка">
+          <div class="calib-title">калибровка<span id="calib-view"></span></div>
+          <p class="calib-hint">зелёная линейка в ROI · шкала 0→конец</p>
+          <label class="calib-row">
+            <span>шкала</span>
+            <input id="ruler-mm" type="number" min="50" max="500" step="1" value="200" />
+            <span>mm</span>
+          </label>
+          <div class="calib-row">
+            <span>масштаб</span>
+            <strong id="mm-per-px">—</strong>
+            <span>mm/px</span>
+          </div>
+          <button type="button" id="calibrate" class="ghost calib-btn">калибровать</button>
+          <div class="calib-status" id="calib-status"></div>
+        </section>
+
+        <button type="button" id="roi-reset" class="ghost">rst</button>
+      </aside>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

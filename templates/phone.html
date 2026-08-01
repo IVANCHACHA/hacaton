@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>OZON CV — камера iPhone</title>
+  <style>
+    :root {
+      --bg: #10141a;
+      --ink: #f3f0e8;
+      --accent: #005bff;
+      --muted: #9aa3ad;
+      --bad: #ff6b6b;
+      --on: #3dd68c;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .wrap { width: min(480px, 100%); display: grid; gap: 14px; }
+    h1 { margin: 0; font-size: 1.35rem; letter-spacing: -0.03em; }
+    p { margin: 0; color: var(--muted); line-height: 1.4; }
+    .alert {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(255, 107, 107, 0.12);
+      color: #ffb4b4;
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+    .alert.show { display: block; }
+    video {
+      width: 100%;
+      aspect-ratio: 3/4;
+      object-fit: cover;
+      background: #000;
+      border-radius: 16px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font: 700 1rem ui-sans-serif, system-ui, sans-serif;
+      background: var(--accent);
+      color: #fff;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.secondary {
+      background: #2a3340;
+      color: var(--ink);
+    }
+    button.secondary.on {
+      background: #c9a227;
+      color: #111;
+    }
+    button:disabled { opacity: 0.5; }
+    .status {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85rem;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+    .status.on { color: var(--on); }
+    .status.bad { color: var(--bad); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>{{ title or "Камера для CV Sorter" }}</h1>
+    <p>{{ hint or "Включи камеру — по возможности сразу с фонариком (задняя камера)." }}</p>
+    <div class="alert" id="alert"></div>
+    <video id="v" playsinline muted autoplay></video>
+    <div class="row">
+      <button id="btn" type="button">Включить камеру</button>
+      <button id="torch" type="button" class="secondary" disabled>Фонарик</button>
+    </div>
+    <div class="status" id="st">ожидание</div>
+  </div>
+  <canvas id="c" style="display:none"></canvas>
+  <script>
+    const POST_URL = "{{ post_url or '/api/phone_frame' }}";
+    const CAM = "{{ cam or 'top' }}";
+    const v = document.getElementById("v");
+    const c = document.getElementById("c");
+    const st = document.getElementById("st");
+    const btn = document.getElementById("btn");
+    const torchBtn = document.getElementById("torch");
+    const alertEl = document.getElementById("alert");
+    let timer = null;
+    let sending = false;
+    let track = null;
+    let torchOn = false;
+    let torchSupported = false;
+
+    function showAlert(text) {
+      alertEl.textContent = text;
+      alertEl.classList.add("show");
+    }
+
+    function checkSecure() {
+      const secure = window.isSecureContext === true;
+      const hasMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      if (!secure || !hasMedia) {
+        showAlert(
+          "Safari не даёт камеру по обычному HTTP. Нужен HTTPS: открой ссылку https://…/phone."
+        );
+        st.textContent = secure ? "mediaDevices недоступен" : "небезопасный контекст (нужен https://)";
+        st.classList.add("bad");
+        return false;
+      }
+      return true;
+    }
+
+    function torchCapability(t) {
+      try {
+        const caps = t.getCapabilities ? t.getCapabilities() : {};
+        return !!(caps && (caps.torch === true || (Array.isArray(caps.torch) && caps.torch.length)));
+      } catch {
+        return false;
+      }
+    }
+
+    async function setTorch(on) {
+      if (!track) return false;
+      const attempts = [
+        { advanced: [{ torch: on }] },
+        { torch: on },
+      ];
+      for (const c of attempts) {
+        try {
+          await track.applyConstraints(c);
+          torchOn = on;
+          torchBtn.classList.toggle("on", on);
+          torchBtn.textContent = on ? "Фонарик вкл" : "Фонарик";
+          reportTorch(on, true);
+          return true;
+        } catch {
+          /* try next */
+        }
+      }
+      reportTorch(torchOn, false);
+      return false;
+    }
+
+    async function reportTorch(on, ok) {
+      try {
+        await fetch("/api/torch_state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cam: CAM, on: !!on, supported: !!ok || torchSupported }),
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // фонариком можно управлять с Mac: тянем желаемое состояние
+    let torchSeq = -1;
+    async function pollTorch() {
+      if (!track) return;
+      try {
+        const r = await fetch(`/api/torch?cam=${CAM}`, { cache: "no-store" });
+        const d = await r.json();
+        if (d.seq !== torchSeq) {
+          torchSeq = d.seq;
+          if (!!d.on !== torchOn) await setTorch(!!d.on);
+        } else {
+          reportTorch(torchOn, torchSupported);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    async function start() {
+      if (!checkSecure()) {
+        btn.disabled = false;
+        return;
+      }
+      btn.disabled = true;
+      st.classList.remove("bad");
+      st.textContent = "запрос доступа…";
+      try {
+        // сначала пробуем сразу с torch
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              torch: true,
+            },
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          });
+        }
+        v.srcObject = stream;
+        await v.play();
+        track = stream.getVideoTracks()[0] || null;
+        torchSupported = track ? torchCapability(track) : false;
+        torchBtn.disabled = !track;
+        let torchOk = false;
+        if (track) {
+          torchOk = await setTorch(true);
+          if (!torchOk && torchSupported) {
+            torchOk = await setTorch(true);
+          }
+        }
+        st.textContent = torchOk
+          ? "камера + фонарик · отправка…"
+          : "камера ок · фонарик недоступен в этом Safari — жми «Фонарик»";
+        st.classList.add("on");
+        if (!torchOk) {
+          showAlert(
+            "На части iOS фонарик через Safari ограничен. Если не загорелся — обнови iOS / попробуй кнопку «Фонарик». " +
+            "Либо включи фонарик вручную из Control Center, пока открыта камера."
+          );
+        } else {
+          alertEl.classList.remove("show");
+        }
+        if (timer) clearInterval(timer);
+        timer = setInterval(sendFrame, 100);
+        setInterval(pollTorch, 800);
+      } catch (e) {
+        const name = e && e.name ? e.name : "Error";
+        const msg = e && e.message ? e.message : String(e);
+        st.textContent = name + ": " + msg;
+        st.classList.add("bad");
+        if (name === "NotAllowedError") {
+          showAlert("Доступ запрещён. Настройки → Safari → Камера → разреши для этого сайта.");
+        } else {
+          showAlert("Не удалось открыть камеру. Нужен https:// адрес.");
+        }
+        btn.disabled = false;
+      }
+    }
+
+    torchBtn.addEventListener("click", async () => {
+      if (!track) return;
+      const ok = await setTorch(!torchOn);
+      if (!ok) {
+        showAlert(
+          "Safari не дал включить torch. Включи фонарик вручную: Центр управления → Фонарик, камера остаётся открытой."
+        );
+        st.textContent = "фонарик: только вручную (Control Center)";
+        st.classList.add("bad");
+      } else {
+        st.textContent = torchOn ? "камера + фонарик · отправка…" : "камера · фонарик выкл";
+        st.classList.remove("bad");
+        st.classList.add("on");
+      }
+    });
+
+    async function sendFrame() {
+      if (sending || v.videoWidth < 2) return;
+      sending = true;
+      try {
+        const w = v.videoWidth;
+        const h = v.videoHeight;
+        c.width = w;
+        c.height = h;
+        c.getContext("2d").drawImage(v, 0, 0, w, h);
+        const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.72));
+        if (!blob) return;
+        const r = await fetch(POST_URL, {
+          method: "POST",
+          headers: { "Content-Type": "image/jpeg" },
+          body: blob,
+          cache: "no-store",
+        });
+        if (!r.ok) throw new Error("bad status");
+      } catch (e) {
+        st.textContent = "связь с Mac потеряна";
+        st.classList.remove("on");
+        st.classList.add("bad");
+      } finally {
+        sending = false;
+      }
+    }
+
+    btn.addEventListener("click", start);
+    checkSecure();
+  </script>
+</body>
+</html>

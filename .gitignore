@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+.DS_Store
+
+# модели — качаются отдельно
+*.pt
+*.onnx
+*.engine
+
+# локальные ключи HTTPS и runtime
+certs/
+*.pem
+*.key
+calibration.json
+
+# отладочные дампы / macOS app bundle
+tmp/
+debug_side/
+OZON CV.app/
