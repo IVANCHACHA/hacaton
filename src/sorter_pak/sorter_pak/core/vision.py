@@ -89,14 +89,22 @@ def decode_rgb(data: bytes, width: int, height: int) -> np.ndarray:
     return arr.reshape(height, width, 3).copy()
 
 
-def accumulate_background(current: np.ndarray | None, frame: np.ndarray) -> np.ndarray:
-    """Running-average float32 background, used to build a `segment()`
-    calibration reference from a few startup frames before any item has
-    entered view (see perception_node.py CALIBRATION_FRAMES). A simple
-    average is enough here - Gazebo's render of an empty belt is close to
-    static frame-to-frame, this just smooths out any transient noise."""
+def accumulate_background(current: np.ndarray | None, frame: np.ndarray,
+                           n_prev: int = 0) -> np.ndarray:
+    """Equal-weight running-average float32 background, used to build a
+    `segment()` calibration reference from a few startup frames before any
+    item has entered view (see perception_node.py CALIBRATION_FRAMES).
+
+    `n_prev` is how many frames have already been folded into `current`
+    (0 on the first call). The previous `(current + f) / 2` form was NOT a
+    true mean - it exponentially favoured the latest frame - so the last
+    calibration frame dominated the reference. Equal weighting keeps the
+    empty-belt average stable across the whole calibration window.
+    """
     f = frame.astype(np.float32)
-    return f if current is None else (current + f) / 2.0
+    if current is None or n_prev <= 0:
+        return f
+    return (current * float(n_prev) + f) / float(n_prev + 1)
 
 
 def _fill_holes(mask: np.ndarray) -> np.ndarray:
@@ -118,9 +126,9 @@ def segment(frame: np.ndarray, background: np.ndarray, spec: CameraSpec) -> np.n
     diff = frame.astype(np.float32) - background
     dist = np.linalg.norm(diff, axis=2)
     mask = (dist > spec.diff_threshold).astype(np.uint8) * 255
-    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=1)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not contours:
         return None
@@ -147,9 +155,11 @@ def formal_k(contour: np.ndarray, shape_hw: tuple[int, int]) -> float:
     mask = np.zeros((h, w), np.uint8)
     cv2.drawContours(mask, [contour], -1, 255, -1)
     mask = _fill_holes(mask)
-    # smooth only pixel-level jaggedness, not the actual shape
+    # light close only - a 5x5 CLOSE was rounding rectangle corners enough
+    # to push K of a 300x200 box from ~0.55 up past the 0.8 circularity
+    # threshold (live: Короб 300х200х200 scored K_top=0.823 → false D).
     mask = cv2.morphologyEx(
-        mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not cnts:
         return 0.0

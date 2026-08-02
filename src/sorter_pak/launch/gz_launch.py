@@ -10,11 +10,14 @@ Prerequisites (see docs/GAZEBO.md):
 Usage:
     ros2 launch sorter_pak gz_launch.py
     ros2 launch sorter_pak gz_launch.py gui:=false     # headless (server-only)
+    # single-item smoke test (known B-category box):
+    ros2 launch sorter_pak gz_launch.py gui:=false max_items:=1 item_name:='Короб 300х200х200'
 
 Then, in another shell:
     ros2 topic echo /pak/routing_result
 """
 import os
+import subprocess
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -23,6 +26,7 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 # gz-sim needs a few seconds to load the world and bring up SceneBroadcaster
 # (which is what actually publishes /world/.../dynamic_pose/info and the 2
@@ -35,14 +39,77 @@ from launch_ros.actions import Node
 GZ_STARTUP_DELAY_S = 5.0
 
 
+def _cleanup_stale_processes(world_path):
+    """Verified live on the reference VM: `gz sim` (the actual simulation
+    server, a descendant of the `ruby .../gz sim ...` process this launch
+    file starts) does not reliably die when `ros2 launch` is stopped -
+    neither Ctrl-C (SIGINT) nor `timeout`'s SIGTERM reliably reach/kill it;
+    it was observed still running and consuming ~50% CPU minutes after a
+    bounded test launch had exited. A leftover `gz sim` instance loads the
+    same world and advertises the exact same gz-transport topic/service
+    names (world, /model/<name>/cmd_vel, pose/info, ...) as a freshly
+    started one - this project's spawn/kick/pose-poll calls then land on
+    WHICHEVER instance answers first, non-deterministically, which is a
+    very plausible root cause of "items spawn and immediately scatter"
+    (two independent physics worlds fighting over what look like the same
+    model names) as well as of silently-lost kicks. Run once, synchronously,
+    before any launch actions start, so every `ros2 launch` begins from a
+    guaranteed-clean slate regardless of how the previous run ended.
+
+    Patterns match ANY `gz sim ...pak_line.sdf` (not just this install's
+    absolute path) because the same world has historically been launched
+    from both `/mnt/share/install/...` and `~/ros2_ws/install/...` on the
+    reference VM - a path-scoped pkill left the other copy alive and its
+    leftover `itemN_*` models then blocked the spawn point of the fresh
+    run (see gz_bridge_node._spawn_point_clear).
+    """
+    patterns = [
+        "gz sim .*pak_line\\.sdf",
+        "lib/sorter_pak/gz_bridge_node",
+        "lib/sorter_pak/perception_node",
+        "lib/sorter_pak/executive_node",
+    ]
+    for pattern in patterns:
+        subprocess.run(["pkill", "-9", "-f", pattern],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Also reap orphaned one-shot CLI helpers left by a previous bridge
+    # (same self-congestion class of bug - see GZ_CALL_TIMEOUT_S comment
+    # in gz_bridge_node.py).
+    for pattern in ("gz-transport-topic", "ros_gz_sim create"):
+        subprocess.run(["pkill", "-9", "-f", pattern],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("sorter_pak")
     world_path = os.path.join(pkg_share, "worlds", "pak_line.sdf")
+    _cleanup_stale_processes(world_path)
 
     gui_arg = DeclareLaunchArgument("gui", default_value="true")
     seed_arg = DeclareLaunchArgument("seed", default_value="7")
+    max_items_arg = DeclareLaunchArgument(
+        "max_items", default_value="0",
+        description="0=unlimited; set 1 for a single-item smoke test")
+    item_name_arg = DeclareLaunchArgument(
+        "item_name", default_value="",
+        description="Optional exact catalog name; empty = random")
+    yaw_deg_arg = DeclareLaunchArgument(
+        "yaw_deg", default_value="nan",
+        description="Fixed spawn yaw in degrees; nan = safe random")
+    classification_source_arg = DeclareLaunchArgument(
+        "classification_source", default_value="auto",
+        description="vision | synthetic | auto (vision then synthetic fallback)")
+    pitch_m_arg = DeclareLaunchArgument(
+        "pitch_m", default_value="3.0",
+        description="Metres between spawns (demo-friendly). TZ nominal ~0.7; "
+                    "use pitch_m:=0.7 for full-rate. At 1 m/s, 3.0 m ≈ 3 s gap.")
     gui = LaunchConfiguration("gui")
     seed = LaunchConfiguration("seed")
+    max_items = LaunchConfiguration("max_items")
+    item_name = LaunchConfiguration("item_name")
+    yaw_deg = LaunchConfiguration("yaw_deg")
+    classification_source = LaunchConfiguration("classification_source")
+    pitch_m = LaunchConfiguration("pitch_m")
 
     # ros_gz_sim's gz_args argument-passing differs slightly across
     # releases, so gui vs headless are two explicit Includes (each only
@@ -88,6 +155,7 @@ def generate_launch_description():
         arguments=[
             "camera_top/image@sensor_msgs/msg/Image[gz.msgs.Image",
             "camera_side/image@sensor_msgs/msg/Image[gz.msgs.Image",
+            "camera_overview/image@sensor_msgs/msg/Image[gz.msgs.Image",
         ],
     )
 
@@ -116,11 +184,23 @@ def generate_launch_description():
     sim_time = {"use_sim_time": True}
     bridge_node = Node(
         package="sorter_pak", executable="gz_bridge_node", name="gz_bridge_node",
-        output="screen", parameters=[{"seed": seed}, sim_time],
+        output="screen",
+        parameters=[{
+            "seed": seed,
+            "max_items": ParameterValue(max_items, value_type=int),
+            "item_name": ParameterValue(item_name, value_type=str),
+            "yaw_deg": ParameterValue(yaw_deg, value_type=float),
+            "pitch_m": ParameterValue(pitch_m, value_type=float),
+            **sim_time,
+        }],
     )
     perception_node = Node(
         package="sorter_pak", executable="perception_node", name="perception_node",
-        output="screen", parameters=[sim_time],
+        output="screen",
+        parameters=[{
+            "classification_source": ParameterValue(classification_source, value_type=str),
+            **sim_time,
+        }],
     )
     executive_node = Node(
         package="sorter_pak", executable="executive_node", name="executive_node",
@@ -133,7 +213,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        gui_arg, seed_arg,
+        gui_arg, seed_arg, max_items_arg, item_name_arg, yaw_deg_arg,
+        classification_source_arg, pitch_m_arg,
         gz_sim_gui, gz_sim_headless,
         delayed_ros_side,
     ])
